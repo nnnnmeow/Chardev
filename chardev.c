@@ -9,11 +9,55 @@ static struct cdev mydev_cdev;
 static int major;
 static struct class *mydev_class;
 static dev_t dev;
+static char *buffer;
+static size_t buffer_used;
 
-static const struct file_operations mydev_fops = { .owner = THIS_MODULE };
+#define BUFFER_SIZE 1024
 
-static int __init mydev_init(void) 
-{
+static int mydev_open(struct inode *inode, struct file *file) {
+    return 0;
+}
+
+static int mydev_release(struct inode *inode, struct file *file) {
+    return 0;
+}
+
+static ssize_t mydev_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) {
+    if (*ppos >= buffer_used)
+        return 0;
+    if (*ppos + count > buffer_used)
+        count = buffer_used - *ppos;
+    if (copy_to_user(buf, buffer + *ppos, count) != 0)
+        return -EFAULT;
+
+    *ppos += count;
+    return count;
+}
+
+static ssize_t mydev_write(struct file *file,const char __user *buf, size_t count, loff_t *ppos) {
+    if (count > BUFFER_SIZE) 
+        count -= BUFFER_SIZE;
+    if (copy_from_user(buffer, buf, count) != 0)
+        return -EFAULT;
+
+    buffer_used = count;
+    *ppos += count;
+    return count;
+}
+
+static const struct file_operations mydev_fops = { 
+    .owner = THIS_MODULE,
+    .read = mydev_read,
+    .write = mydev_write,
+    .open = mydev_open,
+    .release = mydev_release    
+};
+
+static int __init mydev_init(void) {
+    pr_info("mydev: loaded, major: %d\n", major);
+    buffer = kzalloc(BUFFER_SIZE, GFP_KERNEL);
+    if (buffer == NULL)
+        return -ENOMEM;
     int ret = alloc_chrdev_region(&dev, 0, 1, "mydev");
     if (ret < 0)
         return ret;
@@ -25,12 +69,13 @@ static int __init mydev_init(void)
     return 0;
 }
 
-static void __exit mydev_exit(void)
-{
+static void __exit mydev_exit(void) {
+    pr_info("mydev: unloaded\n");
     device_destroy(mydev_class, MKDEV(major, 0));
     class_destroy(mydev_class);
     cdev_del(&mydev_cdev);
     unregister_chrdev_region(dev, 1);
+    kfree(buffer);
 }
 
 module_init(mydev_init);

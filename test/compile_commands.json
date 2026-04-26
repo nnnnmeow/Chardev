@@ -1,0 +1,18 @@
+[
+  {
+    "file": "test.cpp",
+    "arguments": [
+      "/usr/bin/g++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-O2",
+      "-o",
+      "test",
+      "test.cpp"
+    ],
+    "directory": "/home/nnnnm/projects/Chardev/test",
+    "output": "test"
+  }
+]

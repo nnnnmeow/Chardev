@@ -85,7 +85,8 @@ static const struct file_operations mydev_fops = {
     .write = mydev_write,
     .open = mydev_open,
     .release = mydev_release,
-    .unlocked_ioctl = mydev_ioctl
+    .unlocked_ioctl = mydev_ioctl,
+    .llseek = default_llseek
 };
 
 static int __init mydev_init(void) {

@@ -4,6 +4,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/mutex.h>
 
 static struct cdev mydev_cdev;
 static int major;
@@ -11,6 +12,7 @@ static struct class *mydev_class;
 static dev_t dev;
 static char *buffer;
 static size_t buffer_used;
+static DEFINE_MUTEX(buffer_lock);
 
 #define BUFFER_SIZE 1024
 
@@ -23,26 +25,42 @@ static int mydev_release(struct inode *inode, struct file *file) {
 }
 
 static ssize_t mydev_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) {
-    if (*ppos >= buffer_used)
-        return 0;
+    ssize_t ret;
+    mutex_lock(&buffer_lock);
+    if (*ppos >= buffer_used) {
+        ret = 0;
+        goto out;
+    }
     if (*ppos + count > buffer_used)
         count = buffer_used - *ppos;
-    if (copy_to_user(buf, buffer + *ppos, count) != 0)
-        return -EFAULT;
+    if (copy_to_user(buf, buffer + *ppos, count) != 0) {
+        ret = -EFAULT;
+        goto out;
+    }
 
     *ppos += count;
-    return count;
+    ret = count;
+    out:
+        mutex_unlock(&buffer_lock); 
+        return ret;
 }
 
 static ssize_t mydev_write(struct file *file,const char __user *buf, size_t count, loff_t *ppos) {
+    ssize_t ret;
+    mutex_lock(&buffer_lock);
     if (count > BUFFER_SIZE) 
-        count -= BUFFER_SIZE;
-    if (copy_from_user(buffer, buf, count) != 0)
-        return -EFAULT;
+        count = BUFFER_SIZE;
+    if (copy_from_user(buffer, buf, count) != 0) {
+        ret = -EFAULT;
+        goto out;
+    }
 
     buffer_used = count;
     *ppos += count;
-    return count;
+    ret = count;
+    out:
+        mutex_unlock(&buffer_lock);
+        return ret;
 }
 
 static const struct file_operations mydev_fops = { 
@@ -54,7 +72,6 @@ static const struct file_operations mydev_fops = {
 };
 
 static int __init mydev_init(void) {
-    pr_info("mydev: loaded, major: %d\n", major);
     buffer = kzalloc(BUFFER_SIZE, GFP_KERNEL);
     if (buffer == NULL)
         return -ENOMEM;
@@ -62,6 +79,7 @@ static int __init mydev_init(void) {
     if (ret < 0)
         return ret;
     major = MAJOR(dev);
+    pr_info("mydev: loaded, major: %d\n", major);
     cdev_init(&mydev_cdev, &mydev_fops);
     cdev_add(&mydev_cdev, dev, 1);
     mydev_class = class_create("mydev");

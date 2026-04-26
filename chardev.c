@@ -5,6 +5,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/mutex.h>
+#include <linux/ioctl.h>
 
 static struct cdev mydev_cdev;
 static int major;
@@ -15,6 +16,8 @@ static size_t buffer_used;
 static DEFINE_MUTEX(buffer_lock);
 
 #define BUFFER_SIZE 1024
+#define MYDEV_IOC_MAGIC 'k'
+#define MYDEV_IOC_CLEAR _IO(MYDEV_IOC_MAGIC, 0)
 
 static int mydev_open(struct inode *inode, struct file *file) {
     return 0;
@@ -63,12 +66,26 @@ static ssize_t mydev_write(struct file *file,const char __user *buf, size_t coun
         return ret;
 }
 
+static long mydev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    switch (cmd) {
+        case MYDEV_IOC_CLEAR:
+            mutex_lock(&buffer_lock);
+            memset(buffer, 0, BUFFER_SIZE);
+            buffer_used = 0;
+            mutex_unlock(&buffer_lock);
+            return 0;
+        default:
+            return -ENOTTY;
+    }
+}
+
 static const struct file_operations mydev_fops = { 
     .owner = THIS_MODULE,
     .read = mydev_read,
     .write = mydev_write,
     .open = mydev_open,
-    .release = mydev_release    
+    .release = mydev_release,
+    .unlocked_ioctl = mydev_ioctl
 };
 
 static int __init mydev_init(void) {
